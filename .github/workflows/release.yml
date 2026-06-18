@@ -96,6 +96,21 @@ jobs:
       - name: List artifacts
         run: ls -R dist
 
+      - name: Release flags
+        id: relflags
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          # Tags ending in -rc.<number> are pre-releases (never "latest" and not
+          # mirrored to the Homebrew tap); everything else is the latest release.
+          if [[ "$tag" =~ -rc\.[0-9]+$ ]]; then
+            echo "prerelease=true"  >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "make_latest=true"  >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
@@ -104,3 +119,5 @@ jobs:
           files: dist/**/*
           generate_release_notes: true
           fail_on_unmatched_files: true
+          prerelease: ${{ steps.relflags.outputs.prerelease }}
+          make_latest: ${{ steps.relflags.outputs.make_latest }}
