@@ -427,6 +427,10 @@ tr = "Tercihler"
 zh-hans = "设置"
 zh-hant = "設定"
 
+[FileKeyBindings]
+en = "Key Bindings"
+ja = "キーバインド"
+
 [FileClose]
 en = "Close File"
 ar = "إغلاق الملف"

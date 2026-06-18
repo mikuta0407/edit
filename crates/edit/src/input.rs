@@ -18,7 +18,7 @@ use crate::vt;
 /// Of course you could just translate on the ABI boundary, but my hope is that this
 /// design lets me realize some restrictions early on that I can't foresee yet.
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct InputKey(u32);
 
 impl InputKey {
@@ -217,6 +217,259 @@ pub mod kbmod {
     pub const CTRL_SHIFT: InputKeyMod = InputKeyMod::new(0x05000000);
     pub const ALT_SHIFT: InputKeyMod = InputKeyMod::new(0x06000000);
     pub const CTRL_ALT_SHIFT: InputKeyMod = InputKeyMod::new(0x07000000);
+}
+
+/// An editor command that a key can be bound to.
+///
+/// Variants are split into "application" actions (handled by the binary's
+/// global shortcut dispatch) and "textarea" actions (handled by the textarea
+/// in [`crate::tui`]). The split is purely about *who executes them*; both
+/// share a single [`KeyBindings`] map so users configure them in one place.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Action {
+    // Application actions (handled by the binary).
+    FileNew,
+    FileOpen,
+    FileSave,
+    FileSaveAs,
+    FileClose,
+    FileExit,
+    GoToFile,
+    GoToLine,
+    Find,
+    Replace,
+    FindNext,
+
+    // Textarea actions (handled by `tui`).
+    SelectAll,
+    SelectLine,
+    Copy,
+    Cut,
+    Paste,
+    Undo,
+    Redo,
+    DeleteWordLeft,
+    DeleteWordRight,
+    ToggleWordWrap,
+    ToggleOvertype,
+    WordLeft,
+    WordRight,
+    LineStart,
+    LineEnd,
+    DocumentStart,
+    DocumentEnd,
+}
+
+impl Action {
+    /// Maps a configuration name (e.g. `"selectAll"`) to an [`Action`].
+    pub fn from_name(name: &str) -> Option<Action> {
+        Some(match name {
+            "new" => Action::FileNew,
+            "open" => Action::FileOpen,
+            "save" => Action::FileSave,
+            "saveAs" => Action::FileSaveAs,
+            "close" => Action::FileClose,
+            "exit" => Action::FileExit,
+            "goToFile" => Action::GoToFile,
+            "goToLine" => Action::GoToLine,
+            "find" => Action::Find,
+            "replace" => Action::Replace,
+            "findNext" => Action::FindNext,
+            "selectAll" => Action::SelectAll,
+            "selectLine" => Action::SelectLine,
+            "copy" => Action::Copy,
+            "cut" => Action::Cut,
+            "paste" => Action::Paste,
+            "undo" => Action::Undo,
+            "redo" => Action::Redo,
+            "deleteWordLeft" => Action::DeleteWordLeft,
+            "deleteWordRight" => Action::DeleteWordRight,
+            "toggleWordWrap" => Action::ToggleWordWrap,
+            "toggleOvertype" => Action::ToggleOvertype,
+            "wordLeft" => Action::WordLeft,
+            "wordRight" => Action::WordRight,
+            "lineStart" => Action::LineStart,
+            "lineEnd" => Action::LineEnd,
+            "documentStart" => Action::DocumentStart,
+            "documentEnd" => Action::DocumentEnd,
+            _ => return None,
+        })
+    }
+}
+
+/// Parses a key combination string such as `"ctrl+shift+a"`, `"alt+z"`,
+/// `"home"` or `"f3"` into an [`InputKey`]. Returns `None` if the string is
+/// not a valid combination. Parsing is case-insensitive and modifier order
+/// independent.
+pub fn parse_key(s: &str) -> Option<InputKey> {
+    let mut modifiers = kbmod::NONE;
+    let mut key: Option<InputKey> = None;
+
+    for part in s.split('+') {
+        let part = part.trim();
+        if part.is_empty() {
+            return None;
+        }
+
+        match part.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" | "ctl" => modifiers |= kbmod::CTRL,
+            "alt" | "option" | "opt" | "meta" => modifiers |= kbmod::ALT,
+            "shift" => modifiers |= kbmod::SHIFT,
+            name => {
+                // Only a single non-modifier key is allowed.
+                if key.is_some() {
+                    return None;
+                }
+                key = Some(parse_key_name(name)?);
+            }
+        }
+    }
+
+    Some(key?.with_modifiers(modifiers))
+}
+
+/// Parses the non-modifier portion of a key combination (already lowercased).
+fn parse_key_name(s: &str) -> Option<InputKey> {
+    let bytes = s.as_bytes();
+    if bytes.len() == 1 {
+        let c = bytes[0];
+        if c.is_ascii_lowercase() {
+            // `vk::A` etc. use the uppercase ASCII value.
+            return Some(InputKey::new((c - 0x20) as u32));
+        }
+        if c.is_ascii_digit() {
+            return Some(InputKey::new(c as u32));
+        }
+    }
+
+    Some(match s {
+        "home" => vk::HOME,
+        "end" => vk::END,
+        "left" => vk::LEFT,
+        "right" => vk::RIGHT,
+        "up" => vk::UP,
+        "down" => vk::DOWN,
+        "pageup" | "prior" => vk::PRIOR,
+        "pagedown" | "next" => vk::NEXT,
+        "insert" | "ins" => vk::INSERT,
+        "delete" | "del" => vk::DELETE,
+        "backspace" | "back" | "bksp" => vk::BACK,
+        "tab" => vk::TAB,
+        "enter" | "return" => vk::RETURN,
+        "escape" | "esc" => vk::ESCAPE,
+        "space" => vk::SPACE,
+        "f1" => vk::F1,
+        "f2" => vk::F2,
+        "f3" => vk::F3,
+        "f4" => vk::F4,
+        "f5" => vk::F5,
+        "f6" => vk::F6,
+        "f7" => vk::F7,
+        "f8" => vk::F8,
+        "f9" => vk::F9,
+        "f10" => vk::F10,
+        "f11" => vk::F11,
+        "f12" => vk::F12,
+        "f13" => vk::F13,
+        "f14" => vk::F14,
+        "f15" => vk::F15,
+        "f16" => vk::F16,
+        "f17" => vk::F17,
+        "f18" => vk::F18,
+        "f19" => vk::F19,
+        "f20" => vk::F20,
+        "f21" => vk::F21,
+        "f22" => vk::F22,
+        "f23" => vk::F23,
+        "f24" => vk::F24,
+        _ => return None,
+    })
+}
+
+/// A mapping of key combinations to [`Action`]s.
+///
+/// Built from a set of built-in defaults (see [`KeyBindings::default`]) that
+/// reproduce the editor's classic behavior, then optionally customized via
+/// [`KeyBindings::apply_override`] from the user's `keybindings.json`.
+#[derive(Clone)]
+pub struct KeyBindings {
+    map: Vec<(InputKey, Action)>,
+}
+
+impl Default for KeyBindings {
+    fn default() -> Self {
+        let mut map = vec![
+            // Application actions.
+            (vk::N.with_modifiers(kbmod::CTRL), Action::FileNew),
+            (vk::O.with_modifiers(kbmod::CTRL), Action::FileOpen),
+            (vk::S.with_modifiers(kbmod::CTRL), Action::FileSave),
+            (vk::S.with_modifiers(kbmod::CTRL_SHIFT), Action::FileSaveAs),
+            (vk::W.with_modifiers(kbmod::CTRL), Action::FileClose),
+            (vk::Q.with_modifiers(kbmod::CTRL), Action::FileExit),
+            (vk::P.with_modifiers(kbmod::CTRL), Action::GoToFile),
+            (vk::G.with_modifiers(kbmod::CTRL), Action::GoToLine),
+            (vk::F.with_modifiers(kbmod::CTRL), Action::Find),
+            (vk::R.with_modifiers(kbmod::CTRL), Action::Replace),
+            (vk::F3, Action::FindNext),
+            // Textarea actions.
+            (vk::A.with_modifiers(kbmod::CTRL), Action::SelectAll),
+            (vk::L.with_modifiers(kbmod::CTRL), Action::SelectLine),
+            (vk::C.with_modifiers(kbmod::CTRL), Action::Copy),
+            (vk::INSERT.with_modifiers(kbmod::CTRL), Action::Copy),
+            (vk::X.with_modifiers(kbmod::CTRL), Action::Cut),
+            (vk::DELETE.with_modifiers(kbmod::SHIFT), Action::Cut),
+            (vk::V.with_modifiers(kbmod::CTRL), Action::Paste),
+            (vk::INSERT.with_modifiers(kbmod::SHIFT), Action::Paste),
+            (vk::Z.with_modifiers(kbmod::CTRL), Action::Undo),
+            (vk::Y.with_modifiers(kbmod::CTRL), Action::Redo),
+            (vk::Z.with_modifiers(kbmod::CTRL_SHIFT), Action::Redo),
+            (vk::H.with_modifiers(kbmod::CTRL), Action::DeleteWordLeft),
+            (vk::DELETE.with_modifiers(kbmod::CTRL), Action::DeleteWordRight),
+            (vk::Z.with_modifiers(kbmod::ALT), Action::ToggleWordWrap),
+            (vk::INSERT, Action::ToggleOvertype),
+        ];
+
+        // On macOS, terminals commonly emit the Emacs style Alt+B/Alt+F
+        // (ESC b / ESC f) sequences for word-wise cursor movement.
+        if cfg!(any(target_os = "macos", target_os = "ios")) {
+            map.push((vk::B.with_modifiers(kbmod::ALT), Action::WordLeft));
+            map.push((vk::F.with_modifiers(kbmod::ALT), Action::WordRight));
+        }
+
+        Self { map }
+    }
+}
+
+impl KeyBindings {
+    /// Creates an empty set of key bindings (no defaults).
+    ///
+    /// Useful as a `const` initializer; call [`KeyBindings::default`] for the
+    /// built-in bindings.
+    pub const fn new() -> Self {
+        Self { map: Vec::new() }
+    }
+
+    /// Rebinds `action` to exactly `keys`, replacing any previous keys bound to
+    /// it and taking over those keys from any other action (last write wins).
+    pub fn apply_override(&mut self, action: Action, keys: &[InputKey]) {
+        // Free the keys this action was previously bound to.
+        self.map.retain(|&(_, a)| a != action);
+        for &key in keys {
+            // The newly assigned key takes precedence over any other action.
+            self.map.retain(|&(k, _)| k != key);
+            self.map.push((key, action));
+        }
+    }
+
+    /// Returns the action bound to `key`, if any.
+    pub fn action_for(&self, key: InputKey) -> Option<Action> {
+        self.map.iter().find(|&&(k, _)| k == key).map(|&(_, a)| a)
+    }
+
+    /// Returns a representative key bound to `action` (for display purposes).
+    pub fn key_for(&self, action: Action) -> Option<InputKey> {
+        self.map.iter().find(|&&(_, a)| a == action).map(|&(k, _)| k)
+    }
 }
 
 /// Mouse input state. Up/Down, Left/Right, etc.
@@ -449,6 +702,13 @@ impl<'input> Iterator for Stream<'_, '_, 'input> {
                             let height = (csi.params[1] as CoordType).clamp(1, 32767);
                             return Some(Input::Resize(Size { width, height }));
                         }
+                        'u' => {
+                            // Kitty keyboard protocol key event:
+                            // `CSI <codepoint> ; <modifiers> u`.
+                            if let Some(input) = Self::parse_kitty_key(csi) {
+                                return Some(input);
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -541,6 +801,32 @@ impl<'input> Stream<'_, '_, 'input> {
         modifiers
     }
 
+    /// Parses a Kitty keyboard protocol key event (`CSI <codepoint> ; <mods> u`).
+    ///
+    /// The codepoint is the base (unshifted) key; modifiers (including Shift)
+    /// are carried separately, which is what lets us distinguish e.g.
+    /// `Ctrl+Shift+A` from `Ctrl+A` — something the legacy control-code
+    /// encoding cannot express. We only enable the "disambiguate" flag, so
+    /// functional keys (arrows, Home/End, F-keys, ...) keep arriving via their
+    /// legacy CSI sequences and only "text-like" keys reach this function.
+    fn parse_kitty_key(csi: &vt::Csi) -> Option<Input<'input>> {
+        let codepoint = csi.params[0] as u32;
+        let key = match codepoint {
+            // Letters: map to the uppercase value `vk` uses (e.g. 'a' -> 'A').
+            0x61..=0x7a => codepoint - 0x20,
+            // Keys Kitty reports via their ASCII control codepoint.
+            9 => vk::TAB.value(),
+            13 => vk::RETURN.value(),
+            27 => vk::ESCAPE.value(),
+            127 => vk::BACK.value(),
+            // Other plain ASCII keys (digits, space, symbols) pass through.
+            0x20..=0x7e => codepoint,
+            // Functional keys with Private Use Area codepoints, etc.: ignore.
+            _ => return None,
+        };
+        Some(Input::Keyboard(InputKey::new(key) | Self::parse_modifiers(csi)))
+    }
+
     fn parse_xterm_mouse(params: &[u16], final_byte: char) -> Option<Input<'input>> {
         const SHIFT: u16 = 0x04;
         const ALT: u16 = 0x08;
@@ -590,5 +876,93 @@ impl<'input> Stream<'_, '_, 'input> {
         mouse.modifiers |= if (btn & CTRL) != 0 { kbmod::CTRL } else { kbmod::NONE };
 
         Some(Input::Mouse(mouse))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Runs a raw byte sequence through the VT + input parsers and returns the
+    /// first keyboard event, if any.
+    fn first_key(seq: &str) -> Option<InputKey> {
+        let mut vt_parser = crate::vt::Parser::new();
+        let mut input_parser = Parser::new();
+        let mut stream = input_parser.parse(vt_parser.parse(seq));
+        match stream.next() {
+            Some(Input::Keyboard(key)) => Some(key),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn kitty_csi_u_distinguishes_ctrl_shift() {
+        // `CSI <codepoint> ; <modifiers> u`, where modifiers = 1 + bitmask
+        // (shift=1, alt=2, ctrl=4). Codepoint 97 = 'a', 101 = 'e'.
+        assert_eq!(first_key("\x1b[97;5u"), Some(vk::A.with_modifiers(kbmod::CTRL)));
+        assert_eq!(first_key("\x1b[97;6u"), Some(vk::A.with_modifiers(kbmod::CTRL_SHIFT)));
+        assert_eq!(first_key("\x1b[101;6u"), Some(vk::E.with_modifiers(kbmod::CTRL_SHIFT)));
+        // No-modifier and named keys.
+        assert_eq!(first_key("\x1b[97u"), Some(vk::A));
+        assert_eq!(first_key("\x1b[27u"), Some(vk::ESCAPE));
+        assert_eq!(first_key("\x1b[13;5u"), Some(vk::RETURN.with_modifiers(kbmod::CTRL)));
+    }
+
+    #[test]
+    fn parse_key_combinations() {
+        assert_eq!(parse_key("ctrl+a"), Some(vk::A.with_modifiers(kbmod::CTRL)));
+        assert_eq!(parse_key("Ctrl+Shift+A"), Some(vk::A.with_modifiers(kbmod::CTRL_SHIFT)));
+        assert_eq!(parse_key("alt+z"), Some(vk::Z.with_modifiers(kbmod::ALT)));
+        assert_eq!(parse_key("home"), Some(vk::HOME));
+        assert_eq!(parse_key("f3"), Some(vk::F3));
+        assert_eq!(parse_key("CTRL+SHIFT+F12"), Some(vk::F12.with_modifiers(kbmod::CTRL_SHIFT)));
+        // Modifier order is irrelevant.
+        assert_eq!(parse_key("shift+ctrl+a"), parse_key("ctrl+shift+a"));
+
+        // Invalid inputs.
+        assert_eq!(parse_key(""), None);
+        assert_eq!(parse_key("ctrl+"), None);
+        assert_eq!(parse_key("ctrl+nope"), None);
+        assert_eq!(parse_key("ctrl+a+b"), None);
+    }
+
+    #[test]
+    fn action_names() {
+        assert_eq!(Action::from_name("selectAll"), Some(Action::SelectAll));
+        assert_eq!(Action::from_name("lineStart"), Some(Action::LineStart));
+        assert_eq!(Action::from_name("save"), Some(Action::FileSave));
+        assert_eq!(Action::from_name("unknown"), None);
+    }
+
+    #[test]
+    fn default_bindings_match_classic_behavior() {
+        let kb = KeyBindings::default();
+        assert_eq!(kb.action_for(vk::A.with_modifiers(kbmod::CTRL)), Some(Action::SelectAll));
+        assert_eq!(kb.action_for(vk::S.with_modifiers(kbmod::CTRL)), Some(Action::FileSave));
+        assert_eq!(kb.action_for(vk::C.with_modifiers(kbmod::CTRL)), Some(Action::Copy));
+        // A single action can be reached via more than one key.
+        assert_eq!(kb.action_for(vk::INSERT.with_modifiers(kbmod::CTRL)), Some(Action::Copy));
+    }
+
+    #[test]
+    fn overrides_rebind_and_free_keys() {
+        // Mirrors the documented example: move Select All to Ctrl+Shift+A and
+        // bind Ctrl+A to "go to line start".
+        let mut kb = KeyBindings::default();
+        kb.apply_override(Action::SelectAll, &[parse_key("ctrl+shift+a").unwrap()]);
+        kb.apply_override(Action::LineStart, &[parse_key("ctrl+a").unwrap()]);
+
+        assert_eq!(kb.action_for(vk::A.with_modifiers(kbmod::CTRL)), Some(Action::LineStart));
+        assert_eq!(kb.action_for(vk::A.with_modifiers(kbmod::CTRL_SHIFT)), Some(Action::SelectAll));
+    }
+
+    #[test]
+    fn override_last_write_wins_on_key_collision() {
+        // Binding a second action to Ctrl+A takes the key away from Select All
+        // even without explicitly moving Select All first.
+        let mut kb = KeyBindings::default();
+        kb.apply_override(Action::LineStart, &[parse_key("ctrl+a").unwrap()]);
+        assert_eq!(kb.action_for(vk::A.with_modifiers(kbmod::CTRL)), Some(Action::LineStart));
+        assert_eq!(kb.key_for(Action::SelectAll), None);
     }
 }
