@@ -4,12 +4,17 @@ A simple editor for simple needs.
 
 This editor pays homage to the classic [MS-DOS Editor](https://en.wikipedia.org/wiki/MS-DOS_Editor), but with a modern interface and input controls similar to VS Code. The goal is to provide an accessible editor that even users largely unfamiliar with terminals can easily use.
 
+> **About this fork.** This is an independent custom fork of
+> [microsoft/edit](https://github.com/microsoft/edit), maintained by
+> [mikuta0407](https://github.com/mikuta0407). It carries personal customizations and is **not**
+> intended to be contributed back upstream. The original work is © Microsoft Corporation and
+> licensed under the MIT License — see [`LICENSE`](./LICENSE).
+
 ![Screenshot of Edit with the About dialog in the foreground](./assets/edit_hero_image.png)
 
 ## Installation
 
-This is [mikuta0407](https://github.com/mikuta0407)'s custom fork. Builds are distributed
-through my Homebrew tap and the GitHub
+Builds are distributed through my Homebrew tap and the GitHub
 [Releases page](https://github.com/mikuta0407/edit/releases/latest).
 
 ### macOS / Linux (Homebrew)
