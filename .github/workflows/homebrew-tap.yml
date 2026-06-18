@@ -1,18 +1,25 @@
 name: Update Homebrew Tap
 
-# Mirrors a published release into the mikuta0407/homebrew-apps tap by
-# regenerating Formula/edit.rb. Only non-pre-release tags reach here:
-# GitHub's `released` activity type excludes pre-releases (the -rc.N tags,
-# which release.yml marks as pre-releases), and an explicit regex guard
-# covers the manual workflow_dispatch path.
+# Mirrors the latest non-pre-release release into the mikuta0407/homebrew-apps
+# tap by regenerating Formula/edit.rb.
+#
+# Triggered after the "Release" workflow finishes (not on the `release` event):
+# the release object is published *before* release.yml uploads its assets, so
+# reacting to `released` races the upload. `workflow_run` fires once Release has
+# fully completed, guaranteeing the assets exist.
+#
+# The target version is resolved with `gh release view` (the latest release),
+# which excludes pre-releases — i.e. the latest non-rc release, exactly what the
+# tap should track. `-rc.N` tags are therefore never published here.
 on:
-  release:
-    types: [released]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish to the tap"
-        required: true
+        description: "Release tag to publish (default: latest non-rc release)"
+        required: false
 
 permissions:
   contents: read
@@ -20,11 +27,20 @@ permissions:
 jobs:
   update-tap:
     runs-on: ubuntu-latest
+    # On workflow_run, only proceed when the Release run succeeded.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Resolve tag & detect rc
         id: meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag }}"
+          if [ -z "$tag" ]; then
+            # Latest release excludes pre-releases (the -rc.N tags).
+            tag="$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)"
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           if [[ "$tag" =~ -rc\.[0-9]+$ ]]; then
