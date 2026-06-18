@@ -243,6 +243,7 @@ pub enum Action {
     // Textarea actions (handled by `tui`).
     SelectAll,
     SelectLine,
+    CutLine,
     Copy,
     Cut,
     Paste,
@@ -277,6 +278,7 @@ impl Action {
             "findNext" => Action::FindNext,
             "selectAll" => Action::SelectAll,
             "selectLine" => Action::SelectLine,
+            "cutLine" => Action::CutLine,
             "copy" => Action::Copy,
             "cut" => Action::Cut,
             "paste" => Action::Paste,
@@ -414,6 +416,8 @@ impl Default for KeyBindings {
             // Textarea actions.
             (vk::A.with_modifiers(kbmod::CTRL), Action::SelectAll),
             (vk::L.with_modifiers(kbmod::CTRL), Action::SelectLine),
+            // nano-style "cut the current line".
+            (vk::K.with_modifiers(kbmod::CTRL), Action::CutLine),
             (vk::C.with_modifiers(kbmod::CTRL), Action::Copy),
             (vk::INSERT.with_modifiers(kbmod::CTRL), Action::Copy),
             (vk::X.with_modifiers(kbmod::CTRL), Action::Cut),
@@ -942,6 +946,8 @@ mod tests {
         assert_eq!(kb.action_for(vk::C.with_modifiers(kbmod::CTRL)), Some(Action::Copy));
         // A single action can be reached via more than one key.
         assert_eq!(kb.action_for(vk::INSERT.with_modifiers(kbmod::CTRL)), Some(Action::Copy));
+        // nano-style cut-line on Ctrl+K.
+        assert_eq!(kb.action_for(vk::K.with_modifiers(kbmod::CTRL)), Some(Action::CutLine));
     }
 
     #[test]

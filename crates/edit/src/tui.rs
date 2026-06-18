@@ -2397,6 +2397,12 @@ impl<'a> Context<'a, '_> {
                 match action {
                     Action::SelectAll => tb.select_all(),
                     Action::SelectLine => tb.select_line(),
+                    Action::CutLine => {
+                        // nano-style Ctrl+K: cut the whole current line
+                        // (including its newline) to the clipboard.
+                        tb.select_line();
+                        tb.cut(self.clipboard_mut());
+                    }
                     Action::Copy => tb.copy(self.clipboard_mut()),
                     Action::Cut => tb.cut(self.clipboard_mut()),
                     Action::Paste => tb.paste(self.clipboard_ref(), single_line),

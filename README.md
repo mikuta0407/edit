@@ -136,6 +136,7 @@ Action | Default | Description
 `findNext` | `F3` | Find next
 `selectAll` | `Ctrl+A` | Select all
 `selectLine` | `Ctrl+L` | Select line
+`cutLine` | `Ctrl+K` | Cut the current line (nano-style)
 `copy` | `Ctrl+C`, `Ctrl+Insert` | Copy
 `cut` | `Ctrl+X`, `Shift+Delete` | Cut
 `paste` | `Ctrl+V`, `Shift+Insert` | Paste
