@@ -12,6 +12,18 @@ This editor pays homage to the classic [MS-DOS Editor](https://en.wikipedia.org/
 
 ![Screenshot of Edit with the About dialog in the foreground](./assets/edit_hero_image.png)
 
+## Fork customizations
+
+On top of upstream [microsoft/edit](https://github.com/microsoft/edit), this fork adds:
+
+- **Configurable key bindings** via a `keybindings.json` file, including support for the
+  [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) so combinations
+  such as `Ctrl+Shift+<letter>` can be told apart from `Ctrl+<letter>`. See
+  [Key bindings](#key-bindings) for the full list of actions and how to remap them.
+- **Nano-style "cut current line" action** — `cutLine`, bound to `Ctrl+K` by default.
+
+Everything else tracks upstream.
+
 ## Installation
 
 Builds are distributed through my Homebrew tap and the GitHub
