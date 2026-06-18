@@ -8,41 +8,34 @@ This editor pays homage to the classic [MS-DOS Editor](https://en.wikipedia.org/
 
 ## Installation
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/microsoft-edit.svg?exclude_unsupported=1)](https://repology.org/project/microsoft-edit/versions)
+This is [mikuta0407](https://github.com/mikuta0407)'s custom fork. Builds are distributed
+through my Homebrew tap and the GitHub
+[Releases page](https://github.com/mikuta0407/edit/releases/latest).
 
-You can also download binaries from [our Releases page](https://github.com/microsoft/edit/releases/latest).
+### macOS / Linux (Homebrew)
+
+```sh
+brew install mikuta0407/apps/edit
+```
+
+or:
+
+```sh
+brew tap mikuta0407/apps
+brew install edit
+```
+
+Supported: macOS (Apple Silicon), Linux (x86_64 / arm64).
 
 ### Windows
 
-You can install the latest version with WinGet:
-```powershell
-winget install Microsoft.Edit
-```
+Download `edit-<version>-windows-amd64.zip` or `edit-<version>-windows-arm64.zip` from the
+[Releases page](https://github.com/mikuta0407/edit/releases/latest), extract it, and run
+`edit.exe`.
 
-### Linux (build from source)
+### Build from source
 
-If your distribution does not provide binaries, or if you'd like to build your own, you can use our install script, provided you have installed:
-* Rust (via `rustup` or similar)
-* A C compiler (e.g. `gcc`)
-* ICU (e.g. libicu78, libicu, icu)
-* curl/wget and tar
-
-The following command will then install `msedit` into `~/.local/bin`:
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/microsoft/edit/main/assets/install.sh | sh
-```
-
-Additional flags are `--dev`, to build directly from the main branch, and `--system` to install into `/usr/local/bin`. For instance:
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/microsoft/edit/main/assets/install.sh | sh -s -- --dev --system
-```
-
-### macOS
-
-You can install the latest version with Homebrew:
-```sh
-brew install msedit
-```
+See [Build Instructions](#build-instructions) below.
 
 ## Build Instructions
 
