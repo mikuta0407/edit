@@ -22,7 +22,7 @@ use draw_menubar::*;
 use draw_statusbar::*;
 use edit::framebuffer::{self, IndexedColor};
 use edit::helpers::*;
-use edit::input::{self, kbmod, vk};
+use edit::input::{self, Action};
 use edit::oklab::StraightRgba;
 use edit::tui::*;
 use edit::vt::{self, Token};
@@ -90,6 +90,7 @@ fn run() -> apperr::Result<()> {
     let mut vt_parser = vt::Parser::new();
     let mut input_parser = input::Parser::new();
     let mut tui = Tui::new()?;
+    tui.set_key_bindings(Settings::borrow().key_bindings.clone());
 
     let _restore = setup_terminal(&mut tui, &mut state, &mut vt_parser);
 
@@ -360,35 +361,25 @@ fn draw(ctx: &mut Context, state: &mut State) {
 
     if let Some(key) = ctx.keyboard_input() {
         // Shortcuts that are not handled as part of the textarea, etc.
-
-        if key == kbmod::CTRL | vk::N {
-            draw_add_untitled_document(ctx, state);
-        } else if key == kbmod::CTRL | vk::O {
-            state.wants_file_picker = StateFilePicker::Open;
-        } else if key == kbmod::CTRL | vk::S {
-            state.wants_save = true;
-        } else if key == kbmod::CTRL_SHIFT | vk::S {
-            state.wants_file_picker = StateFilePicker::SaveAs;
-        } else if key == kbmod::CTRL | vk::W {
-            state.wants_close = true;
-        } else if key == kbmod::CTRL | vk::P {
-            state.wants_go_to_file = true;
-        } else if key == kbmod::CTRL | vk::Q {
-            state.wants_exit = true;
-        } else if key == kbmod::CTRL | vk::G {
-            state.wants_goto = true;
-        } else if key == kbmod::CTRL | vk::F && state.wants_search.kind != StateSearchKind::Disabled
-        {
-            state.wants_search.kind = StateSearchKind::Search;
-            state.wants_search.focus = true;
-        } else if key == kbmod::CTRL | vk::R && state.wants_search.kind != StateSearchKind::Disabled
-        {
-            state.wants_search.kind = StateSearchKind::Replace;
-            state.wants_search.focus = true;
-        } else if key == vk::F3 {
-            search_execute(ctx, state, SearchAction::Search);
-        } else {
-            return;
+        match ctx.keybinding_action(key) {
+            Some(Action::FileNew) => draw_add_untitled_document(ctx, state),
+            Some(Action::FileOpen) => state.wants_file_picker = StateFilePicker::Open,
+            Some(Action::FileSave) => state.wants_save = true,
+            Some(Action::FileSaveAs) => state.wants_file_picker = StateFilePicker::SaveAs,
+            Some(Action::FileClose) => state.wants_close = true,
+            Some(Action::GoToFile) => state.wants_go_to_file = true,
+            Some(Action::FileExit) => state.wants_exit = true,
+            Some(Action::GoToLine) => state.wants_goto = true,
+            Some(Action::Find) if state.wants_search.kind != StateSearchKind::Disabled => {
+                state.wants_search.kind = StateSearchKind::Search;
+                state.wants_search.focus = true;
+            }
+            Some(Action::Replace) if state.wants_search.kind != StateSearchKind::Disabled => {
+                state.wants_search.kind = StateSearchKind::Replace;
+                state.wants_search.focus = true;
+            }
+            Some(Action::FindNext) => search_execute(ctx, state, SearchAction::Search),
+            _ => return,
         }
 
         // All of the above shortcuts happen to require a rerender.
@@ -561,7 +552,9 @@ impl Drop for RestoreModes {
         // Same as in the beginning but in the reverse order.
         // It also includes DECSCUSR 0 to reset the cursor style and DECTCEM to show the cursor.
         // We specifically don't reset mode 1036, because most applications expect it to be set nowadays.
-        sys::write_stdout("\x1b[0 q\x1b[?25h\x1b]0;\x07\x1b[?1002;1006;2004l\x1b[?1049l");
+        // The leading `CSI < u` pops any Kitty keyboard protocol flags we pushed
+        // (a no-op / ignored sequence on terminals that don't support it).
+        sys::write_stdout("\x1b[<u\x1b[0 q\x1b[?25h\x1b]0;\x07\x1b[?1002;1006;2004l\x1b[?1049l");
     }
 }
 
@@ -586,6 +579,11 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
         // actual display width of the character and assigns it columns accordingly.
         // We detect it by writing the character and asking for the cursor position.
         "\r…\x1b[6n",
+        // Query support for the Kitty keyboard protocol. A supporting terminal
+        // replies with `CSI ? <flags> u`; others stay silent and we fall back
+        // to the legacy encoding. This works the same over SSH, since the reply
+        // is negotiated end-to-end with the actual terminal emulator.
+        "\x1b[?u",
         // CSI c reports the terminal capabilities.
         // It also helps us to detect the end of the responses, because not all
         // terminals support the OSC queries, but all of them support CSI c.
@@ -597,6 +595,7 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
     let mut indexed_colors = framebuffer::DEFAULT_THEME;
     let mut color_responses = 0;
     let mut ambiguous_width = 1;
+    let mut kitty_keyboard = false;
 
     while !done {
         let scratch = scratch_arena(None);
@@ -615,6 +614,8 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
                     'c' => done = true,
                     // CPR (Cursor Position Report) response.
                     'R' => ambiguous_width = csi.params[1] as CoordType - 1,
+                    // Kitty keyboard protocol support reply (`CSI ? <flags> u`).
+                    'u' => kitty_keyboard = true,
                     _ => {}
                 },
                 Token::Osc { mut data, partial } => {
@@ -680,6 +681,14 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
 
     if color_responses == indexed_colors.len() {
         tui.setup_indexed_colors(indexed_colors);
+    }
+
+    if kitty_keyboard {
+        // Push the "disambiguate escape codes" flag (0b1). This makes the
+        // terminal report otherwise-ambiguous keys (Ctrl/Shift+letter, Esc,
+        // ...) as `CSI u` events, so modifiers like Ctrl+Shift become
+        // distinguishable. `RestoreModes` pops it again on exit.
+        sys::write_stdout("\x1b[>1u");
     }
 
     RestoreModes

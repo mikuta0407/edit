@@ -69,6 +69,95 @@ Environment variable | Description
 `EDIT_CFG_ICU*` | See [ICU library name (SONAME)](#icu-library-name-soname) below for details. Linux package maintainers are advised to review and configure these options.
 `EDIT_CFG_LANGUAGES` | A comma-separated list of languages to include in the build. See [i18n/edit.toml](i18n/edit.toml) for available languages.
 
+## Customization
+
+### Key bindings
+
+You can remap the editor's shortcuts with a `keybindings.json` file in your
+configuration directory:
+
+* **Linux / macOS:** `~/.config/edit/keybindings.json`
+  (or `$XDG_CONFIG_HOME/edit/keybindings.json`)
+* **Windows:** `%APPDATA%\edit\keybindings.json`
+
+The file maps an *action* to a key (or a list of keys). For example, to use the
+Emacs-style `Ctrl+A` / `Ctrl+E` for moving to the start/end of the line while
+keeping "select all" available on `Ctrl+Shift+A`:
+
+```json
+{
+  "selectAll": "ctrl+shift+a",
+  "lineStart": "ctrl+a",
+  "lineEnd": "ctrl+e"
+}
+```
+
+A key string is written as `[ctrl+][alt+][shift+]<key>` (case-insensitive,
+modifier order does not matter), where `<key>` is a letter `a`–`z`, a digit
+`0`–`9`, or one of `home`, `end`, `left`, `right`, `up`, `down`, `pageup`,
+`pagedown`, `insert`, `delete`, `backspace`, `tab`, `enter`, `escape`, `space`,
+or `f1`–`f24`. Assign several keys to one action with an array, e.g.
+`"copy": ["ctrl+c", "ctrl+insert"]`.
+
+> **`Ctrl+Shift+<letter>` and the Kitty keyboard protocol.** Classic terminals
+> cannot tell `Ctrl+Shift+A` apart from `Ctrl+A` (both send the same byte), so
+> bindings like `ctrl+shift+a` only work in terminals that support the
+> [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/)
+> — e.g. Ghostty, kitty, WezTerm, foot, Alacritty, or recent iTerm2. Edit
+> detects support at startup and enables it automatically (falling back to the
+> classic encoding otherwise, including Terminal.app). This negotiation works
+> over SSH too. If you run Edit inside `tmux`/`screen`, the multiplexer must
+> forward extended keys (tmux 3.3+ with `set -g extended-keys on`); otherwise
+> pick a binding that does not rely on `Ctrl+Shift` (e.g. a free `Ctrl`+letter
+> or a function key).
+
+Assigning a key that is already used by another action transfers it to the new
+action (the last assignment wins), so the example above frees `Ctrl+A` from
+"select all" automatically. Changes take effect the next time you start the
+editor.
+
+You can open the file directly from **File ▸ Key Bindings** (it is created for
+you if it does not exist yet).
+
+Available actions and their defaults:
+
+Action | Default | Description
+--- | --- | ---
+`new` | `Ctrl+N` | New file
+`open` | `Ctrl+O` | Open file
+`save` | `Ctrl+S` | Save
+`saveAs` | `Ctrl+Shift+S` | Save as…
+`close` | `Ctrl+W` | Close file
+`exit` | `Ctrl+Q` | Exit
+`goToFile` | `Ctrl+P` | Go to file
+`goToLine` | `Ctrl+G` | Go to line
+`find` | `Ctrl+F` | Find
+`replace` | `Ctrl+R` | Replace
+`findNext` | `F3` | Find next
+`selectAll` | `Ctrl+A` | Select all
+`selectLine` | `Ctrl+L` | Select line
+`cutLine` | `Ctrl+K` | Cut the current line (nano-style)
+`copy` | `Ctrl+C`, `Ctrl+Insert` | Copy
+`cut` | `Ctrl+X`, `Shift+Delete` | Cut
+`paste` | `Ctrl+V`, `Shift+Insert` | Paste
+`undo` | `Ctrl+Z` | Undo
+`redo` | `Ctrl+Y`, `Ctrl+Shift+Z` | Redo
+`deleteWordLeft` | `Ctrl+H` | Delete word to the left
+`deleteWordRight` | `Ctrl+Delete` | Delete word to the right
+`toggleWordWrap` | `Alt+Z` | Toggle word wrap
+`toggleOvertype` | `Insert` | Toggle overtype mode
+`wordLeft` | `Alt+B` (macOS) | Move one word left
+`wordRight` | `Alt+F` (macOS) | Move one word right
+`lineStart` | _(unbound)_ | Move to start of line
+`lineEnd` | _(unbound)_ | Move to end of line
+`documentStart` | _(unbound)_ | Move to start of document
+`documentEnd` | _(unbound)_ | Move to end of document
+
+The cursor movement keys (arrows, `Home`, `End`, `Page Up`/`Page Down`) keep
+their built-in behavior, including selection with `Shift`. The `lineStart` /
+`lineEnd` actions move without selecting; use `Shift+Home` / `Shift+End` to
+select.
+
 ## Notes to Package Maintainers
 
 ### Package Naming
