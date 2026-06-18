@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - mikuta0407-customs
   pull_request:
     branches:
-      - main
+      - mikuta0407-customs
 
 env:
   CARGO_TERM_COLOR: always
