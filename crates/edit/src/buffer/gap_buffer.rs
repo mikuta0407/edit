@@ -5,11 +5,9 @@ use std::ops::Range;
 use std::ptr::{self, NonNull};
 use std::{io, slice};
 
-use stdext::sys::{virtual_commit, virtual_release, virtual_reserve};
-use stdext::{ReplaceRange as _, slice_copy_safe};
-
 use crate::document::{ReadableDocument, WriteableDocument};
 use crate::helpers::*;
+use crate::sys::{virtual_commit, virtual_release, virtual_reserve};
 
 #[cfg(target_pointer_width = "32")]
 const LARGE_CAPACITY: usize = 128 * MEBI;
@@ -56,8 +54,16 @@ pub struct GapBuffer {
     gap_off: usize,
     /// Gap length.
     gap_len: usize,
-    /// Increments every time the buffer is modified.
+    /// The current text revision. Technically, this belongs to [`super::TextBuffer`],
+    /// who manages this value via its undo/redo system. However, moving it here ensures
+    /// that we never forget to sync `generation_counter` and `generation` on mutations.
     generation: u32,
+    /// Increments every time the buffer is modified.
+    ///
+    /// For instance, saving to disk, typing, undoing it, should restore [`super::TextBuffer`]'s "clean" flag.
+    /// If one is typing from the undone state, naively incrementing the generation again would prevent identifying
+    /// such diverging edits. E.g. type "a", undo, type "b" --> "b" _must_ have a different generation than "a".
+    generation_counter: u32,
     /// If `Vec(..)`, the buffer is optimized for small amounts of text
     /// and uses the standard heap. Otherwise, it uses virtual memory.
     buffer: BackingBuffer,
@@ -87,8 +93,42 @@ impl GapBuffer {
             gap_off: 0,
             gap_len: 0,
             generation: 0,
+            generation_counter: 0,
             buffer,
         })
+    }
+
+    /// Enlarges the reserved capacity of the buffer.
+    ///
+    /// TODO: Ideally we would only lazily reserve virtual memory, such that this doesn't
+    /// need to reserve + release. However, this requires reporting errors from enlarge_gap.
+    pub fn try_reserve(&mut self, bytes: usize) {
+        if bytes < self.reserve {
+            return;
+        }
+
+        if self.text_length != 0 {
+            debug_assert!(false);
+            return;
+        }
+        let BackingBuffer::VirtualMemory(old_ptr, old_len) = self.buffer else {
+            debug_assert!(false);
+            return;
+        };
+
+        unsafe {
+            let bytes =
+                bytes.saturating_add(MEBI + LARGE_ALLOC_CHUNK - 1) & !(LARGE_ALLOC_CHUNK - 1);
+            if let Ok(ptr) = virtual_reserve(bytes) {
+                virtual_release(old_ptr, old_len);
+                self.buffer = BackingBuffer::VirtualMemory(ptr, bytes);
+                self.text = ptr;
+                self.reserve = bytes;
+                self.commit = 0;
+                self.gap_off = 0;
+                self.gap_len = 0;
+            }
+        }
     }
 
     #[allow(clippy::len_without_is_empty)]
@@ -96,12 +136,22 @@ impl GapBuffer {
         self.text_length
     }
 
+    /// The current revision.
+    ///
+    /// Automatically updated during all mutations.
     pub fn generation(&self) -> u32 {
         self.generation
     }
 
+    /// Restore a historical revision (for undo/redo).
     pub fn set_generation(&mut self, generation: u32) {
         self.generation = generation;
+    }
+
+    /// Assigns a fresh revision, including for document settings that affect serialization.
+    pub fn bump_generation(&mut self) {
+        self.generation_counter = self.generation_counter.wrapping_add(1);
+        self.generation = self.generation_counter;
     }
 
     /// WARNING: The returned slice must not necessarily be the same length as `len` (due to OOM).
@@ -125,7 +175,7 @@ impl GapBuffer {
             self.enlarge_gap(len);
         }
 
-        self.generation = self.generation.wrapping_add(1);
+        self.bump_generation();
         unsafe { slice::from_raw_parts_mut(self.text.add(self.gap_off).as_ptr(), self.gap_len) }
     }
 
@@ -171,29 +221,21 @@ impl GapBuffer {
     }
 
     fn enlarge_gap(&mut self, len: usize) {
-        let gap_chunk;
-        let alloc_chunk;
-
-        if matches!(self.buffer, BackingBuffer::VirtualMemory(..)) {
-            gap_chunk = LARGE_GAP_CHUNK;
-            alloc_chunk = LARGE_ALLOC_CHUNK;
+        let (gap_chunk, alloc_chunk) = if matches!(self.buffer, BackingBuffer::VirtualMemory(..)) {
+            (LARGE_GAP_CHUNK, LARGE_ALLOC_CHUNK)
         } else {
-            gap_chunk = SMALL_GAP_CHUNK;
-            alloc_chunk = SMALL_ALLOC_CHUNK;
-        }
+            (SMALL_GAP_CHUNK, SMALL_ALLOC_CHUNK)
+        };
 
         let gap_len_old = self.gap_len;
         let gap_len_new = (len + gap_chunk + gap_chunk - 1) & !(gap_chunk - 1);
+        let gap_len_new = gap_len_new.min(self.reserve - self.text_length);
 
         let bytes_old = self.commit;
         let bytes_new = self.text_length + gap_len_new;
 
         if bytes_new > bytes_old {
             let bytes_new = (bytes_new + alloc_chunk - 1) & !(alloc_chunk - 1);
-
-            if bytes_new > self.reserve {
-                return;
-            }
 
             match &mut self.buffer {
                 BackingBuffer::VirtualMemory(ptr, _) => unsafe {
@@ -243,7 +285,7 @@ impl GapBuffer {
     pub fn clear(&mut self) {
         self.gap_off = 0;
         self.gap_len += self.text_length;
-        self.generation = self.generation.wrapping_add(1);
+        self.bump_generation();
         self.text_length = 0;
     }
 
@@ -333,38 +375,28 @@ impl GapBuffer {
 impl ReadableDocument for GapBuffer {
     fn read_forward(&self, off: usize) -> &[u8] {
         let off = off.min(self.text_length);
-        let beg;
-        let len;
 
-        if off < self.gap_off {
+        let (beg, len) = if off < self.gap_off {
             // Cursor is before the gap: We can read until the start of the gap.
-            beg = off;
-            len = self.gap_off - off;
+            (off, self.gap_off - off)
         } else {
             // Cursor is after the gap: We can read until the end of the buffer.
-            beg = off + self.gap_len;
-            len = self.text_length - off;
-        }
+            (off + self.gap_len, self.text_length - off)
+        };
 
         unsafe { slice::from_raw_parts(self.text.add(beg).as_ptr(), len) }
     }
 
     fn read_backward(&self, off: usize) -> &[u8] {
         let off = off.min(self.text_length);
-        let beg;
-        let len;
 
-        if off <= self.gap_off {
+        let (beg, len) = if off <= self.gap_off {
             // Cursor is before the gap: We can read until the beginning of the buffer.
-            beg = 0;
-            len = off;
+            (0, off)
         } else {
             // Cursor is after the gap: We can read until the end of the gap.
-            beg = self.gap_off + self.gap_len;
-            // The cursor_off doesn't account of the gap_len.
-            // (This allows us to move the gap without recalculating the cursor position.)
-            len = off - self.gap_off;
-        }
+            (self.gap_off + self.gap_len, off - self.gap_off)
+        };
 
         unsafe { slice::from_raw_parts(self.text.add(beg).as_ptr(), len) }
     }

@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 
+use edit::arena::{arena_format, read_to_string, scratch_arena};
 use edit::buffer::TextBuffer;
 use edit::cell::{Ref, SemiRefCell};
 use edit::input::{Action, KeyBindings, parse_key};
 use edit::json;
 use edit::lsh::{LANGUAGES, Language};
-use stdext::arena::{read_to_string, scratch_arena};
-use stdext::arena_format;
 
 use crate::apperr;
 
