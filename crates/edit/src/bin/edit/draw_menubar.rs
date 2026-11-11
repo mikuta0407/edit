@@ -7,7 +7,7 @@ use edit::input::{Action, vk};
 use edit::tui::*;
 
 use crate::localization::*;
-use crate::settings::Settings;
+use crate::settings::{Settings, Theme};
 use crate::state::*;
 
 pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
@@ -223,6 +223,19 @@ fn draw_menu_view(ctx: &mut Context, state: &mut State) {
             word_wrap,
         ) {
             tb.set_word_wrap(!word_wrap);
+            ctx.needs_rerender();
+        }
+    }
+
+    for (theme, label, accelerator) in [
+        (Theme::Terminal, LocId::ViewThemeTerminal, 'T'),
+        (Theme::Dark, LocId::ViewThemeDark, 'D'),
+        (Theme::Light, LocId::ViewThemeLight, 'L'),
+    ] {
+        if ctx.menubar_menu_checkbox(loc(label), accelerator, vk::NULL, state.theme == theme)
+            && state.theme != theme
+        {
+            state.wants_theme = Some(theme);
             ctx.needs_rerender();
         }
     }

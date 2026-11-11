@@ -23,6 +23,11 @@ On top of upstream [microsoft/edit](https://github.com/microsoft/edit), this for
   [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) so combinations
   such as `Ctrl+Shift+<letter>` can be told apart from `Ctrl+<letter>`. Details below.
 - **Nano-style "cut current line" action** — `cutLine`, bound to `Ctrl+K` by default.
+- **Light theme** — switch between the terminal's own palette, a built-in dark theme and a
+  built-in light theme from **View ▸ Terminal Theme / Dark Theme / Light Theme**. The startup
+  theme can be set in `settings.json` (**File ▸ Preferences**) with
+  `"theme": "terminal" | "dark" | "light"` (default: `"terminal"`). Switching from the menu
+  applies to the current session only.
 
 Everything else tracks upstream.
 

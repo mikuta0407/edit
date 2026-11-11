@@ -440,6 +440,16 @@ impl Tui {
         self.framebuffer.set_indexed_colors(colors);
     }
 
+    /// Switches the color palette at runtime.
+    /// See [`Framebuffer::set_theme()`].
+    pub fn set_theme(
+        &mut self,
+        colors: [StraightRgba; INDEXED_COLORS_COUNT],
+        use_terminal_defaults: bool,
+    ) {
+        self.framebuffer.set_theme(colors, use_terminal_defaults);
+    }
+
     /// Set up translations for Ctrl/Alt/Shift modifiers.
     pub fn setup_modifier_translations(&mut self, translations: ModifierTranslations) {
         self.modifier_translations = translations;

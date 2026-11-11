@@ -32,7 +32,7 @@ use edit::{base64, path, sys, unicode};
 use localization::*;
 use state::*;
 
-use crate::settings::Settings;
+use crate::settings::{Settings, Theme};
 
 #[cfg(target_pointer_width = "32")]
 const SCRATCH_ARENA_CAPACITY: usize = 128 * MEBI;
@@ -96,25 +96,12 @@ fn run() -> apperr::Result<()> {
 
     let _restore = setup_terminal(&mut tui, &mut state, &mut vt_parser);
 
-    state.menubar_color_bg = tui.indexed(IndexedColor::Background).oklab_blend(tui.indexed_alpha(
-        IndexedColor::BrightBlue,
-        1,
-        2,
-    ));
-    state.menubar_color_fg = tui.contrasted(state.menubar_color_bg);
-    let floater_bg = tui
-        .indexed_alpha(IndexedColor::Background, 2, 3)
-        .oklab_blend(tui.indexed_alpha(IndexedColor::Foreground, 1, 3));
-    let floater_fg = tui.contrasted(floater_bg);
     tui.setup_modifier_translations(ModifierTranslations {
         ctrl: loc(LocId::Ctrl),
         alt: loc(LocId::Alt),
         shift: loc(LocId::Shift),
     });
-    tui.set_floater_default_bg(floater_bg);
-    tui.set_floater_default_fg(floater_fg);
-    tui.set_modal_default_bg(floater_bg);
-    tui.set_modal_default_fg(floater_fg);
+    apply_theme(&mut tui, &mut state, Settings::borrow().theme);
 
     #[cfg(feature = "debug-latency")]
     let mut last_latency_width = 0;
@@ -339,7 +326,46 @@ fn print_version() {
     sys::write_stdout(concat!("edit version ", env!("CARGO_PKG_VERSION"), "\n"));
 }
 
+/// Switches the color palette and recomputes the colors derived from it.
+fn apply_theme(tui: &mut Tui, state: &mut State, theme: Theme) {
+    match theme {
+        Theme::Terminal => match state.terminal_palette {
+            Some(palette) => tui.set_theme(palette, true),
+            // The terminal didn't report its palette: paint our dark fallback explicitly.
+            None => tui.set_theme(framebuffer::DEFAULT_THEME, false),
+        },
+        Theme::Dark => tui.set_theme(framebuffer::DEFAULT_THEME, false),
+        Theme::Light => tui.set_theme(framebuffer::LIGHT_THEME, false),
+    }
+    state.theme = theme;
+
+    state.menubar_color_bg = tui.indexed(IndexedColor::Background).oklab_blend(tui.indexed_alpha(
+        IndexedColor::BrightBlue,
+        1,
+        2,
+    ));
+    state.menubar_color_fg = tui.contrasted(state.menubar_color_bg);
+    let floater_bg = tui
+        .indexed_alpha(IndexedColor::Background, 2, 3)
+        .oklab_blend(tui.indexed_alpha(IndexedColor::Foreground, 1, 3));
+    let floater_fg = tui.contrasted(floater_bg);
+    tui.set_floater_default_bg(floater_bg);
+    tui.set_floater_default_fg(floater_fg);
+    tui.set_modal_default_bg(floater_bg);
+    tui.set_modal_default_fg(floater_fg);
+}
+
 fn draw(tui: &mut Tui, input: Option<input::Input>, state: &mut State) {
+    draw_ui(tui, input, state);
+
+    // The palette can't change mid-frame, so a theme switch requested by the UI
+    // is applied here. The UI requested a rerender, so the next frame uses it.
+    if let Some(theme) = state.wants_theme.take() {
+        apply_theme(tui, state, theme);
+    }
+}
+
+fn draw_ui(tui: &mut Tui, input: Option<input::Input>, state: &mut State) {
     let ctx = &mut tui.create_context(input);
 
     draw_menubar(ctx, state);
@@ -709,7 +735,8 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
     }
 
     if color_responses == indexed_colors.len() {
-        tui.setup_indexed_colors(indexed_colors);
+        // Applied later via `apply_theme`, depending on the selected theme.
+        state.terminal_palette = Some(indexed_colors);
     }
 
     if kitty_keyboard {

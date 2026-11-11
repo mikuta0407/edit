@@ -6,7 +6,7 @@ use std::ffi::{OsStr, OsString};
 use std::mem;
 use std::path::{Path, PathBuf};
 
-use edit::framebuffer::IndexedColor;
+use edit::framebuffer::{INDEXED_COLORS_COUNT, IndexedColor};
 use edit::helpers::*;
 use edit::oklab::StraightRgba;
 use edit::tui::*;
@@ -15,6 +15,7 @@ use edit::{buffer, icu};
 use crate::apperr;
 use crate::documents::DocumentManager;
 use crate::localization::*;
+use crate::settings::Theme;
 
 #[repr(transparent)]
 pub struct FormatApperr(apperr::Error);
@@ -134,6 +135,13 @@ pub struct State {
     pub menubar_color_bg: StraightRgba,
     pub menubar_color_fg: StraightRgba,
 
+    /// The currently active color theme.
+    pub theme: Theme,
+    /// Set by the UI to request a theme switch. Applied between frames.
+    pub wants_theme: Option<Theme>,
+    /// The palette reported by the terminal, if it responded to our queries.
+    pub terminal_palette: Option<[StraightRgba; INDEXED_COLORS_COUNT]>,
+
     pub documents: DocumentManager,
 
     // A ring buffer of the last 10 errors.
@@ -184,6 +192,10 @@ impl State {
         Ok(Self {
             menubar_color_bg: StraightRgba::zero(),
             menubar_color_fg: StraightRgba::zero(),
+
+            theme: Theme::Terminal,
+            wants_theme: None,
+            terminal_palette: None,
 
             documents: Default::default(),
 

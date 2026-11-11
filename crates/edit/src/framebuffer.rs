@@ -86,6 +86,32 @@ pub const DEFAULT_THEME: [StraightRgba; INDEXED_COLORS_COUNT] = [
     StraightRgba::from_rgba(0xbebebeff), // Foreground
 ];
 
+/// Built-in light theme, used when the user explicitly picks the light theme.
+///
+/// Unlike typical terminal light palettes, the "bright" colors are kept dark
+/// enough to remain legible as foreground (syntax highlighting) on white.
+pub const LIGHT_THEME: [StraightRgba; INDEXED_COLORS_COUNT] = [
+    StraightRgba::from_rgba(0x1f2328ff), // Black
+    StraightRgba::from_rgba(0xcf222eff), // Red
+    StraightRgba::from_rgba(0x2f8a3cff), // Green
+    StraightRgba::from_rgba(0xd4a72cff), // Yellow
+    StraightRgba::from_rgba(0x0550aeff), // Blue
+    StraightRgba::from_rgba(0x8250dfff), // Magenta
+    StraightRgba::from_rgba(0x1b7c83ff), // Cyan
+    StraightRgba::from_rgba(0xd0d7deff), // White
+    StraightRgba::from_rgba(0x6e7781ff), // BrightBlack
+    StraightRgba::from_rgba(0xa31515ff), // BrightRed
+    StraightRgba::from_rgba(0x098658ff), // BrightGreen
+    StraightRgba::from_rgba(0x795e26ff), // BrightYellow
+    StraightRgba::from_rgba(0x0969daff), // BrightBlue
+    StraightRgba::from_rgba(0xaf00dbff), // BrightMagenta
+    StraightRgba::from_rgba(0x001080ff), // BrightCyan
+    StraightRgba::from_rgba(0xffffffff), // BrightWhite
+    // --------
+    StraightRgba::from_rgba(0xffffffff), // Background
+    StraightRgba::from_rgba(0x1f2328ff), // Foreground
+];
+
 /// A shoddy framebuffer for terminal applications.
 ///
 /// The idea is that you create a [`Framebuffer`], draw a bunch of text and
@@ -140,9 +166,33 @@ impl Framebuffer {
     /// If you call this method, [`Framebuffer`] expects that you
     /// successfully detect the light/dark mode of the terminal.
     pub fn set_indexed_colors(&mut self, colors: [StraightRgba; INDEXED_COLORS_COUNT]) {
+        self.set_theme(colors, true);
+    }
+
+    /// Sets the base color palette, like [`Framebuffer::set_indexed_colors`].
+    ///
+    /// If `use_terminal_defaults` is `false`, the default background and
+    /// foreground are painted explicitly with the palette's colors instead
+    /// of relying on the terminal's own defaults. This is required when the
+    /// palette doesn't match the terminal's (e.g. a light theme on a dark terminal).
+    pub fn set_theme(
+        &mut self,
+        colors: [StraightRgba; INDEXED_COLORS_COUNT],
+        use_terminal_defaults: bool,
+    ) {
         self.indexed_colors = colors;
-        self.background_fill = StraightRgba::zero();
-        self.foreground_fill = StraightRgba::zero();
+        if use_terminal_defaults {
+            self.background_fill = StraightRgba::zero();
+            self.foreground_fill = StraightRgba::zero();
+        } else {
+            self.background_fill = colors[IndexedColor::Background as usize];
+            self.foreground_fill = colors[IndexedColor::Foreground as usize];
+        }
+
+        // The contrast colors depend on the palette.
+        for slot in &self.contrast_colors {
+            slot.set((StraightRgba::zero(), StraightRgba::zero()));
+        }
 
         self.auto_colors = [
             self.indexed_colors[IndexedColor::Black as usize],

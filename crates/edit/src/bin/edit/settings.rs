@@ -9,8 +9,32 @@ use edit::lsh::{LANGUAGES, Language};
 
 use crate::apperr;
 
+/// The color theme of the editor.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Theme {
+    /// Use the terminal's own color palette (the default).
+    Terminal,
+    /// Use the built-in dark palette.
+    Dark,
+    /// Use the built-in light palette.
+    Light,
+}
+
+impl Theme {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "terminal" => Some(Self::Terminal),
+            "dark" => Some(Self::Dark),
+            "light" => Some(Self::Light),
+            _ => None,
+        }
+    }
+}
+
 pub struct Settings {
     pub path: PathBuf,
+    /// The initial color theme (`"theme"` in settings.json).
+    pub theme: Theme,
     pub file_associations: Vec<(String, &'static Language)>,
     /// Path to the user's `keybindings.json` (empty if there's no config dir).
     pub keybindings_path: PathBuf,
@@ -42,6 +66,7 @@ impl Settings {
     const fn new() -> Self {
         Settings {
             path: PathBuf::new(),
+            theme: Theme::Terminal,
             file_associations: Vec::new(),
             keybindings_path: PathBuf::new(),
             key_bindings: KeyBindings::new(),
@@ -166,6 +191,15 @@ impl Settings {
 
                 self.file_associations.push((key.to_string(), language));
             }
+        }
+
+        if let Some(value) = root.get("theme") {
+            let Some(theme) = value.as_str().and_then(Theme::from_name) else {
+                return Err(apperr::Error::SettingsInvalid(
+                    "theme: must be \"terminal\", \"dark\" or \"light\"",
+                ));
+            };
+            self.theme = theme;
         }
 
         Ok(())
