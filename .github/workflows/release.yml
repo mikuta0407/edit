@@ -12,7 +12,7 @@ on:
       tag:
         description: "Release tag to publish"
         required: true
-        default: "v2.1.0-mikuta0407"
+        default: "v2.2.0-mikuta0407"
 
 permissions:
   contents: write

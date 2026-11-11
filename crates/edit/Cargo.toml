@@ -1,7 +1,7 @@
 [package]
 name = "edit"
 description = "A simple editor for simple needs."
-version = "2.1.0-mikuta0407"
+version = "2.2.0-mikuta0407"
 
 edition.workspace = true
 license.workspace = true
